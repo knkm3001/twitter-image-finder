@@ -1,0 +1,4 @@
+db/mysql_data/
+env.py
+__pycache__/
+

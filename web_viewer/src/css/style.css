@@ -1,0 +1,24 @@
+@charset "UTF-8";
+/*全体*/
+html{
+    font-size: 62.5%;
+}
+
+body{
+    padding: 20px 20px;
+    background-color: #f6f7fb;
+    color: #333;
+    font-size: 1.2rem;
+    font-family: "Hiragino Kaku Gothic ProN",Meiryo,sans-serif;
+}
+
+
+*,*::before, *::after{
+    box-sizing: border-box;
+}
+
+a:link,a:visited,a:hover,a:active{
+    color: #7c5119;
+    text-decoration: none;
+}
+

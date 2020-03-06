@@ -1,0 +1,44 @@
+version: '3'
+services:
+    tweet_db:
+        image: mysql
+        container_name: tweet_db
+        ports:
+            - "3316:3306" # ホストがアクセスするポート:DockerNW 内からみたポート
+        volumes:
+            # 初期データを投入するSQLが格納されているdir
+            - ./db/mysql_init:/docker-entrypoint-initdb.d
+            # 永続化するときにマウントするdir
+            - ./db/mysql_data:/var/lib/mysql
+            # confファイル
+            - ./db/mysql_conf/:/etc/mysql/conf.d
+        environment:
+            TZ: Asia/Tokyo
+            MYSQL_ROOT_PASSWORD: root
+    tweet_getter:
+        build:
+           context: tweet_getter
+        container_name: tweet_getter
+        depends_on:
+            - tweet_db
+        tty: true
+        environment:
+            TZ: Asia/Tokyo
+        volumes:
+            # 画像を保存するディレクトリ
+            - ./twitter/timeline:/home/timeline 
+            - ./tweet_getter/src/:/home
+        command: python /home/tweet_getter.py
+    web_viewer:
+       build:
+           context: web_viewer
+       container_name: web_viewer
+       depends_on:
+            - tweet_db
+       volumes:
+            - ./web_viewer/src:/var/www/html
+            - ./web_viewer/php.ini:/usr/local/etc/php/php.ini
+       ports:
+            - 8080:80
+
+

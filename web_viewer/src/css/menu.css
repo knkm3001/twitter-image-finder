@@ -1,0 +1,118 @@
+/*
+以下、メニュー用
+https://www.narugaro.com/web/%E3%81%9F%E3%81%A3%E3%81%9F10%E8%A1%8C%E3%81%A7%E3%81%A7%E3%81%8D%E3%82%8B%EF%BC%81%E3%83%89%E3%83%AD%E3%83%AF%E3%83%BC%E3%83%A1%E3%83%8B%E3%83%A5%E3%83%BC%E3%81%AE%E4%BD%9C%E3%82%8A%E6%96%B9/
+*/
+
+
+.menu-trigger,
+.menu-trigger span {
+  display: block;
+  transition: all .4s;
+  box-sizing: border-box;
+  height: 3px;
+  z-index: 999;
+}
+.menu-trigger {
+  width: 40px;
+  height: 4px;
+  top: 40px;
+  right: 25px;
+  position: fixed;
+}
+.menu-trigger span {
+  width: 100%;
+  height: 4px;
+  background-color: rgb(1, 1, 44);
+  border-radius: 4px;
+  margin: 10;
+}
+
+.menu-trigger span:nth-of-type(1) {
+  top: 0;
+}
+.menu-trigger span:nth-of-type(2) {
+  top: 20px;
+}
+.menu-trigger span:nth-of-type(3) {
+  bottom: 0;
+}
+
+.menu-trigger.active span:nth-of-type(1) {
+  -webkit-transform: translateY(14px) rotate(-45deg);
+  transform: translateY(14px) rotate(-45deg);
+}
+.menu-trigger.active span:nth-of-type(2) {
+  opacity: 0;
+}
+.menu-trigger.active span:nth-of-type(3) {
+  -webkit-transform: translateY(-14px) rotate(45deg);
+  transform: translateY(-14px) rotate(45deg);
+}
+
+.gblnv_block{
+    position: fixed;
+    right: -400px;
+    width: 400;
+    padding: 40 0 0;
+    background-color:rgba(10, 11, 12, 0.95);
+    opacity: 0.9;
+    z-index: 900;
+    height: 100%;
+}
+
+.nav_exp {
+  color: #ebebeb;
+
+}
+
+.open{
+    transform: translate(-400px);
+    transition: all 0.3s linear 0s;
+}
+
+/*
+上に行くボタン
+*/
+.movetop{
+  display: block;
+  transition: all .4s;
+  box-sizing: border-box;
+  z-index: 999;
+  width: 40px;
+  height: 40px;
+  bottom: 40px;
+  right: 25px;
+  position: fixed;
+}
+
+.scrollicon span{
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 46px;
+  height: 46px;
+  margin-left: -23px;
+  border: 1px solid rgba(10, 11, 12, 0.95);
+  border-radius: 100%;
+  box-sizing: border-box;
+}
+
+.scrollicon span::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  content: '';
+  width: 16px;
+  height: 16px;
+  margin: -5px 0 0 -8px;
+  border-left: 1px solid rgba(10, 11, 12, 0.95);
+  border-bottom: 1px solid rgba(10, 11, 12, 0.95);
+  -webkit-transform: rotate(135deg);
+  transform: rotate(135deg);
+  box-sizing: border-box;
+}
+
+
+
+
+
