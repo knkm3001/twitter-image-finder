@@ -2,20 +2,24 @@
 # -*- coding: utf-8 -*-
 
 
-from requests_oauthlib import OAuth1Session
-from datetime import datetime, timedelta, timezone
-from time import sleep
-import json
-import time
-import sys
-import urllib.request
 import re
 import os
-import mysql.connector
+import sys
+import copy
+import json
+import time
+import traceback
+from time import sleep
+
 import slackweb
 import requests
-import copy
-import traceback
+import urllib.request
+import mysql.connector
+
+
+from requests_oauthlib import OAuth1Session
+from datetime import datetime, timedelta, timezone
+
 
 import env
 
@@ -28,18 +32,17 @@ AS = env.ACCESSS_TOKEN_SECERT
 # database
 DB_HOST = env.DB_HOST
 DB_PORT = env.DB_PORT
-DB_DBNAME = env.DB_DBNAME
 DB_USER = env.DB_USER
-DB_PW = env.DB_PW
+DB_PW   = env.DB_PW
+DB_DBNAME = env.DB_DBNAME
 
 # slack
 SLACKURL = env.SLACKURL
-
 slack = slackweb.Slack(SLACKURL)
-CARENT_PATH = "/home/timeline/"
-DIR_PATH = CARENT_PATH + "timeline_" + datetime.now().strftime('%Y-%m%d')
 
-Teitter_API_PALAM = {
+DIR_PATH = "/home/timeline/timeline_" + datetime.now().strftime('%Y-%m%d')
+
+Twitter_API_PALAM = {
           "count" : 200,
           "include_entities" : True,
           "exclude_replies" : False,
@@ -53,30 +56,31 @@ def main():
     """
 
     start_time = time.time()
-    count_sum = 0   # ツイートの総計
-    media_count = 0  # mediaの総計
 
-    # DBからsince_id取得
-    since_id = get_SinceID_fromDB()
+
+    connect = connect_to_db()
+    since_id = get_sinceid_from_db()
 
     # メディア保存先確認
     if not os.path.exists(DIR_PATH):
         os.makedirs(DIR_PATH)
         print('new dir: ',DIR_PATH)
 
+
+
+
     # 制御処理関係
-    i = 0  # 周回数
     max_id = 1 #  とりあえず　
-    outer_loop_status = True #  入れ子のループの中で、内側のループ内で問題があった場合、外側のループから外れることができるよう
+    inner_loop_status = True # 入れ子ループ
+    tweets_counter = 0   # ツイートの総計
+    media_counter = 0  # mediaの総計
 
-    print("mainはじめ")
-
-    for i in range(1,6):  # 200*5=1000
-        if outer_loop_status == False:
+    for loop_times in range(1,6):  # 200*5=1000
+        if inner_loop_status == False:
             break  # 内側で問題があった時、外側のループからも外れる
         try:
-            palams = Teitter_API_PALAM.copy()
-            if i >= 2 :
+            palams = Twitter_API_PALAM.copy()
+            if loop_times >= 2 :
                 palams["max_id"] = max_id - 1
 
             timeline = get_timeline(palams)
@@ -84,38 +88,39 @@ def main():
             for count,tweet in enumerate(timeline):
                 # since_id チェック
                 if since_id is not None and int(tweet["id"]) <= int(since_id):
-                    print("Error: " + "since_idに達しました。")
-                    outer_loop_status = False
+                    print("Error: since_idに達しました。")
+                    inner_loop_status = False
                     break
-                else:  # since_idにはまだ達していない
-                    count_sum += 1 # ツイートの総計
+                else:
+                    tweets_counter += 1
                     print('-------------------------------------------------------')
-                    print(f"No.{i}-{count+1}")
-                    print("tweet sum:",count_sum)
+                    print(f"No.{loop_times}-{count+1}")
+                    print("tweet sum:",tweets_counter)
                     print_tweet_content(tweet)
                     max_id = tweet["id"]
                 
                 try:
                     # 処理その1 メディアを取得
-                    media_url_list,media_path_list = MediaGet(tweet)
-                    media_count += len(media_url_list)
-                except:
-                    traceback.print_exc()
+                    media_url_list,media_path_list = save_tweet_media(tweet)
+                    media_counter += len(media_url_list)
+                except Exception as e:
                     print ("Error: コンテンツ取得時にエラー。")
+                    raise e
 
                 try:
                     # 処理その2 DBにインサート
-                    insert_tweet_into_DB(tweet,media_url_list,media_path_list)
-                except:
-                    traceback.print_exc()
+                    insert_tweet_into_db(connect,tweet,media_url_list,media_path_list)
+                except Exception as e:
+                    connect.rollback()
+                    connect.close()
                     print ("Error: DBインサート時にエラー。")
-            
+                    raise e
         except:
             traceback.print_exc()
             break
 
-    # slackに送信
-    slackpost(start_time,count_sum,media_count)
+    # slackに結果送信
+    slackpost(start_time,tweets_counter,media_counter)
 
 
 def get_timeline(params):
@@ -144,10 +149,11 @@ def get_timeline(params):
     return timeline
 
 
-def connect_to_DB():
+def connect_to_db():
     """
     mariaDB 接続
     """
+
     connect = mysql.connector.connect(
         host = DB_HOST,
         port = DB_PORT,
@@ -159,26 +165,25 @@ def connect_to_DB():
     return connect
 
 
-def get_SinceID_fromDB():
+def get_sinceid_from_db(connect):
     """
     テーブルの一番最新のレコードを取得
     """
-    connect = connect_to_DB()
-    cursor = connect.cursor(dictionary=True)
 
-    latest_tweet = []
+
+    cursor = connect.cursor(dictionary=True,buffered=True)
+
     # テーブルの最新のツイートをlatest_tweetとして取得
     cursor.execute("select * from  timeline order by created_at desc limit 1")
-    latest_tweet = cursor.fetchall()
+    latest_tweet = cursor.fetchone()
 
-    # latest_tweetのtweet_IDとcreated_atをそれぞれ取得(latest_tweetが存在しなければNone)
-    if len(latest_tweet) == 0:
+    # latest_tweetのtweet_IDとcreated_atをそれぞれ取得
+    if latest_tweet:
+        since_id = latest_tweet["tweet_ID"]
+        latest_tweet_date = latest_tweet["created_at"]
+    else:
         since_id = None
         latest_tweet_date = None
-    else:
-        since_id = latest_tweet[0]["tweet_ID"]
-        latest_tweet_date = latest_tweet[0]["created_at"]
-
 
     print("since_id: ",since_id)
     print("latest_tweet_date: ",latest_tweet_date)
@@ -186,32 +191,17 @@ def get_SinceID_fromDB():
     return since_id
 
 
-def slackpost(start_time,count_sum,media_count):
-    """
-    slack 接続 (エラー表示などテキストのpost)
-    """
-    # エラーメッセージを表示
-    end_time = time.time()
-    result_time = end_time - start_time
-
-    end_text = str(count_sum) + " コのツイートをインサートしました。"+"\n" \
-             + str(media_count) + " コのツイートの media を取得しました。"+"\n" \
-             + "全所要時間:" + f"{round(result_time//60)}分{round(result_time-result_time//60*60,2)}秒" +"\n"
-    slack.notify(text=end_text)
-
-
-
-def insert_tweet_into_DB(tweet,media_url_list,media_path_list):
+def insert_tweet_into_db(connect,tweet,media_url_list,media_path_list):
     """
     tweetをDBへインサート
     """
-    jst_date = parse_date_format(tweet)
+
+    jst_date = convert_datetime_to_jst(tweet)
     now_time = datetime.now() # 今処理した時間
 
     # メディアのurlの処理
     media_url_list = str(media_url_list) if media_url_list else None
     media_path_list = str(media_path_list) if media_path_list else None
-
 
     if  re.match('RT @', tweet["text"]):
         # RTのとき
@@ -236,8 +226,8 @@ def insert_tweet_into_DB(tweet,media_url_list,media_path_list):
                     (tweet_ID,insert_date,user_name,user_screen_name,user_ID,RT_flg,RTed_user_name,
                     RTed_user_screen_name,RTed_user_ID,created_at,text,media_url,media_path)
                 values
-                    (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s);
-              """
+                    ({0});
+              """.format(', '.join(['%s']*13))
     else:
         # RTじゃないとき
         vols=(
@@ -255,36 +245,34 @@ def insert_tweet_into_DB(tweet,media_url_list,media_path_list):
                 INSERT INTO timeline
                     (tweet_ID,insert_date,user_name,user_screen_name,user_ID,created_at,text,media_url,media_path)
                 values
-                    (%s,%s,%s,%s,%s,%s,%s,%s,%s);
-              """
+                    ({0});
+              """.format(', '.join(['%s']*9))
 
-    connect = connect_to_DB()
-    try:
-        cursor = connect.cursor(dictionary=True)
-    except:
-        sys.exit()
+    cursor = connect.cursor(dictionary=True,buffered=True)
+
     cursor.execute(sql,vols)
 
     cursor.close()
     connect.commit()
 
 
-def parse_date_format(tweet):
+def convert_datetime_to_jst(tweet):
     """
     created_atの表示修正
     twitter特有の表示形式に変更 "yyyy-mm-dd hh:mm:ss"
     """
     dt = datetime.strptime(str(tweet['created_at']), '%a %b %d %H:%M:%S +0000 %Y')
-    jst_time = datetime(dt.year,dt.month,dt.day,dt.hour,dt.minute,dt.second)  + timedelta(hours=9)
+    jst_time = datetime(dt.year,dt.month,dt.day,dt.hour,dt.minute,dt.second) + timedelta(hours=9)
+
     return jst_time
 
 
-def MediaGet(tweet):
+def save_tweet_media(tweet):
     """
     mediaのダウンロード
     """
 
-    jst_time =  parse_date_format(tweet).strftime('%Y-%m%d-%H%M%S')
+    jst_time =  convert_datetime_to_jst(tweet).strftime('%Y-%m%d-%H%M%S')
 
     media_path_list = [] # mediaのpathを格納
     media_url_list = [] # mediaのurlを格納
@@ -296,14 +284,13 @@ def MediaGet(tweet):
         name = tweet["user"]["screen_name"]
 
     if "extended_entities" not in tweet:
-        pass  # mediaなしはなにもしない
+        pass  # mediaなし
     else:
+        # 複数のmediaが添付されている場合の末尾につけるナンバリング
+        counter = [""]
+        if 1 < len(tweet["extended_entities"]["media"]):
+            counter = ["_1","_2","_3","_4"]
         try:
-            # 複数のmediaが添付されている場合の末尾につけるナンバリング
-            counter = [""]
-            if 1 < len(tweet["extended_entities"]["media"]):
-                counter = ["_1","_2","_3","_4"]
-
             # 取得処理
             for index, content_check in enumerate(tweet["extended_entities"]["media"]):
                 if "video_info" in content_check:
@@ -343,9 +330,27 @@ def print_tweet_content(tweet):
         print(tweet["user"]["screen_name"])
         print(tweet["user"]["name"])
 
-    print(parse_date_format(tweet))
+    print(convert_datetime_to_jst(tweet))
     print(tweet["text"])
+
+
+def slackpost(start_time,tweets_counter,media_counter):
+    """
+    slack 接続
+    """
+
+    # エラーメッセージを表示
+    end_time = time.time()
+    result_time = end_time - start_time
+
+    end_text = str(tweets_counter) + " コのツイートをインサートしました。"+"\n" \
+             + str(media_counter) + " コのツイートの media を取得しました。"+"\n" \
+             + "全所要時間:" + f"{round(result_time//60)}分{round(result_time-result_time//60*60,2)}秒" +"\n"
+    slack.notify(text=end_text)
+
+
 
 if __name__ == "__main__":
     main()
+
 
