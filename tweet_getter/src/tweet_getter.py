@@ -36,11 +36,13 @@ DB_USER = env.DB_USER
 DB_PW   = env.DB_PW
 DB_DBNAME = env.DB_DBNAME
 
+
 # slack
 SLACKURL = env.SLACKURL
 slack = slackweb.Slack(SLACKURL)
 
-DIR_PATH = "/home/timeline/timeline_" + datetime.now().strftime('%Y-%m%d')
+CARENT_PATH = "/home/timeline/"
+DIR_PATH = CARENT_PATH + "timeline_" + datetime.now().strftime('%Y-%m%d')
 
 Twitter_API_PALAM = {
           "count" : 200,
@@ -57,9 +59,20 @@ def main():
 
     start_time = time.time()
 
+    for _ in range(6):
+        try:
+            connect = connect_to_db()
+            if connect.is_connected():
+                break
+        except:
+            traceback.print_exc()
+            sleep(10)
+    else:
+        sys.exit('DBに接続できないので終了します')
 
-    connect = connect_to_db()
-    since_id = get_sinceid_from_db()
+
+
+    since_id = get_sinceid_from_db(connect)
 
     # メディア保存先確認
     if not os.path.exists(DIR_PATH):
