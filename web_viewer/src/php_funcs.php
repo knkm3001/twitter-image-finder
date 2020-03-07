@@ -168,9 +168,6 @@ function make_sql($db){
         $stt->bindValue($k, $v, $type);
     }
 
-    echo('placeholder_data: '.print_r($placeholder_data,true));
-    echo('stt: '.debug_console($stt));
-
     return $stt;
 }
 
